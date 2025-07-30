@@ -2,15 +2,15 @@ if game.PlaceId ~= 286090429 then
     return warn("Not Arsenal, script stopped.")
 end
 
-local Players, RunService = game:GetService("Players"), game:GetService("RunService")
+local Players, RunService, UIS = game:GetService("Players"), game:GetService("RunService"), game:GetService("UserInputService")
 local LocalPlayer, Camera = Players.LocalPlayer, workspace.CurrentCamera
-local ESPEnabled, SilentAimEnabled = true, true
-local espCache = {}
+local ESPEnabled, SilentAimEnabled, FastFire, InstantReload = true, true, true, true
+local espCache, menuVisible = {}, true
 
 -- GUI
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 local Frame = Instance.new("Frame", ScreenGui)
-Frame.Size = UDim2.new(0, 160, 0, 140)
+Frame.Size = UDim2.new(0, 170, 0, 200)
 Frame.Position = UDim2.new(0, 20, 0, 200)
 Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 Frame.BackgroundTransparency = 0.3
@@ -32,6 +32,17 @@ end
 
 createToggle("Silent Aim", SilentAimEnabled, 0, function(v) SilentAimEnabled = v end)
 createToggle("ESP", ESPEnabled, 35, function(v) ESPEnabled = v end)
+createToggle("Fast Fire", FastFire, 70, function(v) FastFire = v end)
+createToggle("Instant Reload", InstantReload, 105, function(v) InstantReload = v end)
+
+-- Bật/tắt menu bằng RightShift
+UIS.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        menuVisible = not menuVisible
+        ScreenGui.Enabled = menuVisible
+    end
+end)
 
 -- Anti Kick & Hook
 hookfunction(Players.LocalPlayer.Kick, function(...) return end)
@@ -56,9 +67,9 @@ mt.__index = function(t, k)
     if SilentAimEnabled and t == mouse and (k == "Hit" or k == "Target") then
         local closest, dist = nil, math.huge
         for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Head") then
-                local head = p.Character.Head.Position
-                local screenPos, visible = Camera:WorldToViewportPoint(head)
+            if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+                local part = p.Character.HumanoidRootPart.Position
+                local screenPos, visible = Camera:WorldToViewportPoint(part)
                 local mag = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
                 if mag < dist then
                     dist = mag
@@ -66,12 +77,27 @@ mt.__index = function(t, k)
                 end
             end
         end
-        if closest and closest.Character and closest.Character:FindFirstChild("Head") then
-            return k == "Hit" and closest.Character.Head.CFrame or closest.Character.Head
+        if closest and closest.Character and closest.Character:FindFirstChild("HumanoidRootPart") then
+            return k == "Hit" and closest.Character.HumanoidRootPart.CFrame or closest.Character.HumanoidRootPart
         end
     end
     return oldIndex(t, k)
 end
+
+-- Fast Fire + Instant Reload
+RunService.Heartbeat:Connect(function()
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Gun") then
+        local tool = LocalPlayer.Character:FindFirstChild("Gun")
+        if tool:FindFirstChild("Config") then
+            if FastFire and tool.Config:FindFirstChild("FireRate") then
+                tool.Config.FireRate.Value = 0.01
+            end
+            if InstantReload and tool.Config:FindFirstChild("ReloadTime") then
+                tool.Config.ReloadTime.Value = 0.01
+            end
+        end
+    end
+end)
 
 -- Kiểm tra sau tường
 local function isBehindWall(char)
@@ -114,7 +140,7 @@ local function removeESP(player)
     end
 end
 
--- Auto Update ESP mọi frame
+-- Auto Update ESP + Check Wall
 RunService.RenderStepped:Connect(function()
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
@@ -131,17 +157,14 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Auto cập nhật player mới và hồi sinh
+-- Auto cập nhật player mới + respawn
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function()
         wait(1)
         if ESPEnabled then createESP(p) end
     end)
 end)
-
 Players.PlayerRemoving:Connect(removeESP)
-
--- Gọi lại cho tất cả player hiện có (hồi sinh cũ)
 for _, p in ipairs(Players:GetPlayers()) do
     if p ~= LocalPlayer then
         p.CharacterAdded:Connect(function()
@@ -151,4 +174,4 @@ for _, p in ipairs(Players:GetPlayers()) do
     end
 end
 
-print("[✅ Arsenal Hack Loaded: SilentAim + Wallbang + ESP + AntiKick + AutoUpdate Players]")
+print("[✅ Arsenal Hack Loaded: SilentAim + Wallbang + ESP + FastFire + InstantReload + MenuToggle]")
