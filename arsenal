@@ -1,0 +1,126 @@
+if game.PlaceId ~= 286090429 then
+    return warn("Not Arsenal, script stopped.")
+end
+
+local Players, RunService = game:GetService("Players"), game:GetService("RunService")
+local LocalPlayer, Camera = Players.LocalPlayer, workspace.CurrentCamera
+local ESPEnabled, SilentAimEnabled = true, true
+
+-- 🧠 GUI Menu
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 150, 0, 120)
+Frame.Position = UDim2.new(0, 20, 0, 200)
+Frame.BackgroundTransparency = 0.3
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+
+local function createToggle(text, default, posY, callback)
+    local btn = Instance.new("TextButton", Frame)
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Position = UDim2.new(0, 0, 0, posY)
+    btn.Text = text .. ": " .. (default and "ON" or "OFF")
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.BackgroundTransparency = 0.2
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.MouseButton1Click:Connect(function()
+        default = not default
+        btn.Text = text .. ": " .. (default and "ON" or "OFF")
+        callback(default)
+    end)
+end
+
+createToggle("Silent Aim", SilentAimEnabled, 0, function(v) SilentAimEnabled = v end)
+createToggle("ESP", ESPEnabled, 35, function(v) ESPEnabled = v end)
+
+-- 🧠 Anti-Ban Hook Raycast
+local mt = getrawmetatable(game)
+setreadonly(mt, false)
+
+local oldNamecall = mt.__namecall
+mt.__namecall = function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+    if SilentAimEnabled and method == "FindPartOnRayWithIgnoreList" and tostring(self) == "Workspace" then
+        -- Trả về nil để tránh phát hiện raycast từ súng
+        return nil
+    end
+    return oldNamecall(self, unpack(args))
+end
+
+-- 🧠 Silent Aim Xuyên Tường
+local function getClosestHead()
+    local closest, distance = nil, math.huge
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Team ~= LocalPlayer.Team and player.Character and player.Character:FindFirstChild("Head") then
+            local pos, onScreen = Camera:WorldToViewportPoint(player.Character.Head.Position)
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                if dist < distance then
+                    distance = dist
+                    closest = player
+                end
+            end
+        end
+    end
+    return closest
+end
+
+local mouse = LocalPlayer:GetMouse()
+local rawIndex = mt.__index
+mt.__index = function(t, k)
+    if SilentAimEnabled and t == mouse and (k == "Hit" or k == "Target") then
+        local target = getClosestHead()
+        if target and target.Character and target.Character:FindFirstChild("Head") then
+            return k == "Hit" and target.Character.Head.CFrame or target.Character.Head
+        end
+    end
+    return rawIndex(t, k)
+end
+
+-- 🧠 ESP Nametag
+local espCache = {}
+
+local function createESP(player)
+    local billboard = Instance.new("BillboardGui", player.Character)
+    billboard.Name = "ESPTag"
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.Adornee = player.Character:WaitForChild("Head")
+    billboard.AlwaysOnTop = true
+
+    local textLabel = Instance.new("TextLabel", billboard)
+    textLabel.Size = UDim2.new(1,0,1,0)
+    textLabel.Text = player.Name
+    textLabel.BackgroundTransparency = 1
+    textLabel.TextColor3 = Color3.new(1,0,0)
+    textLabel.TextStrokeTransparency = 0.5
+
+    espCache[player] = billboard
+end
+
+local function removeESP(player)
+    if espCache[player] then
+        espCache[player]:Destroy()
+        espCache[player] = nil
+    end
+end
+
+Players.PlayerAdded:Connect(function(p)
+    p.CharacterAdded:Connect(function()
+        wait(1)
+        if ESPEnabled then createESP(p) end
+    end)
+end)
+
+Players.PlayerRemoving:Connect(removeESP)
+
+RunService.RenderStepped:Connect(function()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and not espCache[p] and ESPEnabled then
+            createESP(p)
+        elseif espCache[p] and not ESPEnabled then
+            removeESP(p)
+        end
+    end
+end)
+
+print("[Silent Aim Wallbang + ESP Loaded]")
